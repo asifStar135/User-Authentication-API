@@ -167,67 +167,61 @@ Router.route("/change-password").put(authenticate, async(req, res) =>{
 	}
 })
 
-//  request for forgot-password..
-Router.route("/forgot-password").post(async (req, res) =>{
-	try{
-		const {email} = req.body;
-		const user = await User.findOne({email}).select("+password");  //  fetching the user with password...
 
-		if(!user){
+//  function to request the forgot-password
+Router.route("/forgot-password").put(async(req, res) =>{
+	try {
+		const {email} = req.body; //  getting the email..
+		const user = await User.findOne({email}).select("+password");  // fetching user...
+		if(!user)
 			return res.status(404).json({
-				message:"user not found...!"
+				message:"User not found...!"
 			})
+
+		const secret = process.env.SECRET_KEY + user.password; //  making the secret which will generate a token...
+		const payload = { //  data to encode with jwt
+			userId : user._id,
+			email:user.email
 		}
 
-		const secret = process.env.SECRET_KEY + user.password;  //  secret key for this user..
-		const payload = {  //  payload token which is encoded with jwt
-			email:user.email,
-			id:user._id
-		}
+		const token = jwt.sign(payload, secret, {expiresIn:"2min"});   // generating token...
+		const link = `http://localhost:${process.env.PORT}/reset-password/${user._id}/${token}`  //  the exact link to reset the password...
 
-		const token = jwt.sign(payload,secret,{expiresIn:"5m"});
-		const link = `http://localhost:${process.env.PORT}/reset-password/${user._id}/${token}`
-
-		res.json({
-			message:"here's ur link to reset password..",
-			link
+		res.status(201).json({
+			message:"Here's your link for reset password...",
+			link  //  sending the link user..
 		})
 	} catch (error) {
 		res.status(500).json({
 			message:error.message
 		})
 	}
-}) 
+})
 
 
-Router.route("/reset-password/:id/:token").put(async (req, res) =>{
-	try {
-		const {id, token} = req.params;
-		const user = await User.findById(id).select("+password");
-		if(!user)
+Router.route("/reset-password/:id/:token").put(async(req, res) =>{
+	try{
+		const {id, token} = req.params;  //  getting id, token from params
+		const {newPass} = req.body;  //  new password to update...
+
+		const user = await User.findById(id).select("+password");   //  getting the user for password..
+		if(!user) 
 			return res.status(404).json({
 				message:"User not found...!"
 			})
 
+		const secret = process.env.SECRET_KEY + user.password;  //  the same secret for verifying token..
+		const payload = jwt.verify(token, secret); // getting the payload data ...
 
-		const secret = process.env.SECRET_KEY + user.password;
-		const {email, id: _id} = jwt.verify(token, secret);
-		
-		console.log("This is the user -> "+user);
-		console.log("This is the secret ->" +secret);
-		console.log("This is the email -> ", email);
-		console.log("This is the id -> ", _id);
-
-		const {newPass} = req.body;
-		user.password = newPass
+		user.password = newPass;
 		await user.save();
 
 		res.status(201).json({
-			message:"Password is reset...!"
+			message:"you password is reset..."
 		})
-	} catch (error) {
+	}catch(error){
 		res.status(500).json({
-			message:error.message
+			message:"Cannot reset password..."
 		})
 	}
 })
